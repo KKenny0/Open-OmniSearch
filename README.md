@@ -17,12 +17,14 @@ pip install -r requirement.txt
 
 #### Details
 
-- Python = 3.11.9
-- [PyTorch](http://pytorch.org/) (>= 2.0.0)
-- pillow = 10.4.0
-- requests = 2.32.3
-- google-search-results = 2.4.2
-- serpapi = 0.1.5
+- duckduckgo_search = 6.3.5
+- loguru = 0.7.2
+- ollama = 0.3.3
+- Pillow = 11.0.0
+- python-dotenv = 1.0.1
+- Requests = 2.32.3
+- tqdm = 4.67.0
+
 
 # Demo
 
