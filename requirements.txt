@@ -1,0 +1,12 @@
+duckduckgo_search==6.3.5
+jieba==0.42.1
+loguru==0.7.2
+nltk==3.9.1
+ollama==0.3.3
+Pillow==11.0.0
+python-dotenv==1.0.1
+Requests==2.32.3
+tqdm==4.67.0
+streamlit
+st-multimodal-chatinput
+streamlit-authenticator

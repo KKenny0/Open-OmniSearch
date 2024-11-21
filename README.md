@@ -27,7 +27,13 @@ pip install -r requirement.txt
 
 
 # Demo
+![open-omnisearch demo](IMG/demo.png)
 
+The Thinking Process module is still under development
+
+```bash
+streamlit run app.py
+```
 
 ## 🫶Acknowledgements
 - [OmniSearch](https://github.com/Alibaba-NLP/OmniSearch)

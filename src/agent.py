@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from llm_config import *
+from .llm_config import *
 
 load_dotenv()
 

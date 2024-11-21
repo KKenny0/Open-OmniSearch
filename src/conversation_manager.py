@@ -1,11 +1,11 @@
+import io
 from io import BytesIO
-
 import requests
 from PIL import Image
-
-from search_duck import fine_search
-import prompt as prompt
 from loguru import logger
+
+from .prompt import *
+from .search_duck import fine_search
 
 
 class ConversationManager:
@@ -18,24 +18,29 @@ class ConversationManager:
 
     def manage_conversation(self, input_question, image_url, idx):
         self.conversation_num = 0
+        if isinstance(image_url, str) and "http" in image_url[:5]:
+            image_url = BytesIO(requests.get(image_url).content)
+
         messages = [
             {
                 "role": "user",
-                "content": prompt.sys_prompt_1.format(input_question),
-                "images": [BytesIO(requests.get(image_url).content) if "http" in image_url else [image_url]]
+                "content": sys_prompt_1.format(input_question),
+                "images": [image_url]
             }
         ]
         current_message = messages
 
         success, idx, message, answer = self.qa_agent.ask_gpt(messages, idx)
         logger.info(f"first response: {answer}")
+        logger.info(f"first message: {message}")
+
+        chain_of_thought = []
 
         while self.conversation_num < 5:
             if "Final Answer" in answer:
                 # 生成一个字典 tmp_d，代表助手的角色，并将 message 内容添加到其中。
                 # 将 tmp_d 添加到 current_message 中以保留完整会话记录。
                 tmp_d = {"role": "assistant"}
-                print(f"{message=}")
                 tmp_d.update(message)
                 current_message.append(tmp_d)
                 logger.info(answer)
@@ -44,7 +49,8 @@ class ConversationManager:
                 # 返回最终答案（去掉 Final Answer: 前缀）、当前会话状态
                 return answer.split("Final Answer: ")[-1], current_message
 
-            if any(phrase in answer for phrase in
+            if any(phrase in answer
+                   for phrase in
                    ["Image Retrieval with Input Image", "Text Retrieval", "Image Retrieval with Text Query"]):
                 tmp_d = {"role": "assistant"}
                 tmp_d.update(message)
@@ -76,11 +82,12 @@ class ConversationManager:
             # duckduckgo does not support reverse image search,
             # so we use multimodal model to get the image caption first, and
             # then do the search operation
+
             messages = [
                 {
                     "role": "user",
                     "content": "What is in this image?",
-                    "images": [BytesIO(requests.get(image_url).content) if "http" in image_url else [image_url]]
+                    "images": [image_url]
                 }
             ]
             success, idx, message, answer = self.qa_agent.ask_gpt(messages, idx)
@@ -123,7 +130,7 @@ class ConversationManager:
             for img, txt in zip(search_images[:use_imgs_num], search_text[:use_imgs_num]):
                 contents["text"].extend(["Description: " + txt])
 
-                if "http" in img[0]:
+                if "http" in img[0][:5]:
                     img_item = Image.open(requests.get(img[0], stream=True).raw)
                 else:
                     img_item = img[0]
@@ -142,7 +149,7 @@ class ConversationManager:
                 {
                     "role": "user",
                     "content": contents,
-                    "images": [BytesIO(requests.get(image_url).content)] if "http" in image_url else [image_url]
+                    "images": [BytesIO(requests.get(image_url).content)] if "http" in image_url[:5] else [image_url]
                 }
             ]
 
