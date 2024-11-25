@@ -17,19 +17,22 @@ pip install -r requirement.txt
 
 #### Details
 
-- duckduckgo_search = 6.3.5
-- loguru = 0.7.2
-- ollama = 0.3.3
-- Pillow = 11.0.0
-- python-dotenv = 1.0.1
-- Requests = 2.32.3
-- tqdm = 4.67.0
+- duckduckgo_search==6.3.5
+- jieba==0.42.1
+- loguru==0.7.2
+- nltk==3.9.1
+- ollama==0.4.1
+- Pillow==11.0.0
+- python-dotenv==1.0.1
+- PyYAML==6.0.2
+- Requests==2.32.3
+- streamlit==1.40.1
+- streamlit_extras==0.5.0
+- tqdm==4.67.0
 
 
 # Demo
-![open-omnisearch demo](IMG/demo.png)
-
-The Thinking Process module is still under development
+![open-omnisearch demo](IMG/demo.jpeg)
 
 ```bash
 streamlit run app.py

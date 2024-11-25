@@ -1,7 +1,8 @@
-import io
+from typing import Tuple, List
+
+import re
 from io import BytesIO
 import requests
-from PIL import Image
 from loguru import logger
 
 from .prompt import *
@@ -30,13 +31,40 @@ class ConversationManager:
         ]
         current_message = messages
 
-        success, idx, message, answer = self.qa_agent.ask_gpt(messages, idx)
-        logger.info(f"first response: {answer}")
-        logger.info(f"first message: {message}")
+        thought_info = {"thoughts": [], "search": [], "sub_questions": []}
 
-        chain_of_thought = []
+        success, idx, message, answer = self.qa_agent.ask_gpt(messages, idx)
+
+        thought_info['thoughts'].append(self.extract_query(answer, "<Thought>\n"))
 
         while self.conversation_num < 5:
+            if any(phrase in answer
+                   for phrase in
+                   ["Image Retrieval with Input Image", "Text Retrieval", "Image Retrieval with Text Query"]):
+                tmp_d = {"role": "assistant"}
+                tmp_d.update(message)
+                current_message.append(tmp_d)
+                sub_question = self.extract_query(answer, "<Sub-Question>\n")
+                search_images, search_text = self.handle_retrieval(answer, image_url, idx)
+
+                thought_info['sub_questions'].append(sub_question)
+                if search_images:
+                    thought_info['search'].append(search_images[0][0])
+                else:
+                    thought_info['search'].append("\n".join(search_text))
+
+                contents = self.prepare_contents(search_images, messages, sub_question, idx, search_text, image_url)
+                new_item = {"role": "user", "content": "\n".join(contents["text"])}
+                if "images" in contents:
+                    new_item.update({"images": contents["images"]})
+                current_message.append(new_item)
+
+                success, idx, message, answer = self.qa_agent.ask_gpt(current_message, idx)
+                logger.info("conversation step: {} {}".format(self.conversation_num, answer))
+                if not success:
+                    logger.error("Request failed.")
+                    break
+
             if "Final Answer" in answer:
                 # 生成一个字典 tmp_d，代表助手的角色，并将 message 内容添加到其中。
                 # 将 tmp_d 添加到 current_message 中以保留完整会话记录。
@@ -47,46 +75,31 @@ class ConversationManager:
                 logger.info("-------")
                 logger.info(answer.split("Final Answer: ")[-1])
                 # 返回最终答案（去掉 Final Answer: 前缀）、当前会话状态
-                return answer.split("Final Answer: ")[-1], current_message
 
-            if any(phrase in answer
-                   for phrase in
-                   ["Image Retrieval with Input Image", "Text Retrieval", "Image Retrieval with Text Query"]):
-                tmp_d = {"role": "assistant"}
-                tmp_d.update(message)
-                current_message.append(tmp_d)
-                sub_question = answer.split('<Sub-Question>\n')[-1].split('\n')[0]
-                search_images, search_text = self.handle_retrieval(answer, image_url, idx)
+                logger.debug(f"{thought_info=}")
 
-                contents = self.prepare_contents(search_images, messages, sub_question, idx, search_text, image_url)
-                new_item = {"role": "user", "content": "\n".join(contents["text"])}
-                if "images" in contents:
-                    new_item.update({"images": contents["images"]})
-                current_message.append(new_item)
+                return answer.split("Final Answer:")[-1].strip(), current_message, thought_info
 
-                success, idx, message, answer = self.qa_agent.ask_gpt(current_message, idx)
-                logger.debug("conversation step: {} {}".format(self.conversation_num, answer))
-                if not success:
-                    logger.error("Request failed.")
-                    break
             logger.debug(self.conversation_num)
             self.conversation_num += 1
+
         logger.info(answer)
         logger.info(self.conversation_num)
-        # print(current_message)
         logger.info("OVER!")
-        return answer, current_message
 
-    def handle_retrieval(self, answer, image_url, idx):
+        logger.debug(f"{thought_info=}")
+
+        return answer, current_message, thought_info
+
+    def handle_retrieval(self, answer, image_url, idx) -> Tuple[List[Tuple[str, str]], List[str]]:
         if "Image Retrieval with Input Image" in answer:
             # duckduckgo does not support reverse image search,
             # so we use multimodal model to get the image caption first, and
             # then do the search operation
-
             messages = [
                 {
                     "role": "user",
-                    "content": "What is in this image?",
+                    "content": "What is this?",
                     "images": [image_url]
                 }
             ]
@@ -118,7 +131,24 @@ class ConversationManager:
                                self.conversation_num)
 
     def extract_query(self, answer, retrieval_type):
-        return answer.split(retrieval_type)[-1].replace(':', '').replace('"', '').replace('>', '')
+        # the query based on the given retrieval type.
+        # For example, in the case of "Text Retrieval", we extract
+        # the query from the answer after "Text Retrieval:".
+        # In the case of "Image Retrieval with Text Query", we extract
+        # the query from the answer after "Image Retrieval with Text Query:".
+        # In the case of "Image Retrieval with Input Image", we extract
+        # the query from the answer after "Image Retrieval with Input Image:".
+        #
+        # Note: This is a simplified example and may not work for all cases.
+        # You may need to modify this based on the specific requirements of your project
+        extract_pattern = f"(?<={retrieval_type})([\s\S]*?)(?=\n)"
+        query = re.search(extract_pattern, answer, re.DOTALL)
+        if not query:
+            query = ''
+        else:
+            query = query.group(1).strip()
+        logger.debug(f"{answer=}\n{retrieval_type=}\n{query=}")
+        return query
 
     def prepare_contents(self, search_images, messages, sub_question, idx, search_text, image_url):
         if len(search_images) > 0:
@@ -131,7 +161,7 @@ class ConversationManager:
                 contents["text"].extend(["Description: " + txt])
 
                 if "http" in img[0][:5]:
-                    img_item = Image.open(requests.get(img[0], stream=True).raw)
+                    img_item = BytesIO(requests.get(img[0]).content)
                 else:
                     img_item = img[0]
 
@@ -149,16 +179,17 @@ class ConversationManager:
                 {
                     "role": "user",
                     "content": contents,
-                    "images": [BytesIO(requests.get(image_url).content)] if "http" in image_url[:5] else [image_url]
+                    "images": [image_url]
                 }
             ]
 
             success = True
-            answer = self.qa_agent.ask_gpt(sub_messages, idx)
+            _, _, _, answer = self.qa_agent.ask_gpt(sub_messages, idx)
             contents = {"text": ["Contents of retrieved documents: "]}
             if success:
                 contents["text"].extend([answer])
             else:
                 for txt in search_text:
                     contents["text"].extend([txt])
+
         return contents

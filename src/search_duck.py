@@ -5,8 +5,9 @@ import requests
 from io import BytesIO
 from PIL import Image
 from duckduckgo_search import DDGS
+from loguru import logger
 
-retry_attempt = 3
+retry_attempt = 5
 max_results = 5
 
 
@@ -24,10 +25,7 @@ def search_text_by_text(text):
         for i in range(retry_attempt):
             try:
                 ddgs_gen = ddgs.text(text,
-                                     region='cn-zh',
                                      safesearch='Off',
-                                     timelimit='y',
-                                     backend='lite',
                                      max_results=max_results)
                 return ddgs_gen
 
@@ -36,8 +34,8 @@ def search_text_by_text(text):
                 if i < retry_attempt - 1:
                     time.sleep(2)  # 等待 2 秒后重试
                 else:
-                    print("All retries failed.")
-                    return {}
+                    logger.error("All retries failed. DuckDuckGo search error.")
+                    raise ValueError(e)
 
 
 def search_image_by_text(text):
@@ -54,10 +52,9 @@ def search_image_by_text(text):
         for i in range(retry_attempt):
             try:
                 ddgs_gen = ddgs.images(text,
-                                       region='cn-zh',
                                        safesearch='Off',
-                                       timelimit='y',
-                                       max_results=1)
+                                       max_results=max_results)
+                print(f"{ddgs_gen=}")
                 return ddgs_gen[0]
 
             except Exception as e:
@@ -65,8 +62,8 @@ def search_image_by_text(text):
                 if i < retry_attempt - 1:
                     time.sleep(2)  # 等待 2 秒后重试
                 else:
-                    print("All retries failed.")
-                    return {}
+                    logger.error("All retries failed. DuckDuckGo search error.")
+                    raise ValueError(e)
 
 
 def parse_image_search_result_by_text(search_result, save_path, idx, conversation_num):
@@ -80,7 +77,7 @@ def parse_image_search_result_by_text(search_result, save_path, idx, conversatio
         conversation_num (int): 对话序号
 
     Returns:
-        list[str]: 图片 URL 列表
+        tuple[list[str, str], list[str]]: (图片 URL 列表, 图像存储地址), 图像标题信息
     """
     search_images = []
     search_texts = []
@@ -106,7 +103,7 @@ def parse_image_search_result_by_text(search_result, save_path, idx, conversatio
         search_texts.append(search_result.get('title', ''))  # 获取图像的标题和来源
 
     except Exception as e:
-        print(f"Failed to download or save image from {image_url}: {e}")
+        logger.error(f"Failed to download or save image from {image_url}: {e}")
 
     return search_images, search_texts
 
@@ -124,7 +121,7 @@ def fine_search(query, search_type, save_path, dataset_name, idx, conversation_n
         conversation_num (int): 对话序号
 
     Returns:
-        list[str]: 图片 URL 列表
+        tuple[list[tuple[str, str]], list[str]]: (图片 URL 列表, 图像存储路径), 图片标题信息
     """
     if search_type == 'text_search_text':
         search_results = search_text_by_text(query)
@@ -138,6 +135,7 @@ def fine_search(query, search_type, save_path, dataset_name, idx, conversation_n
                 text_data += item['body']
             search_texts.append(text_data)
 
+        logger.debug(f"text_search_text: {search_texts=}")
         return [], search_texts
 
     elif search_type == 'img_search_img':
@@ -145,19 +143,35 @@ def fine_search(query, search_type, save_path, dataset_name, idx, conversation_n
         if os.path.exists(image_search_path):
             print("Image Done!!!")
             with open(image_search_path, 'r') as f_tmp:
-                search_results = json.load(f_tmp)
-                search_images, search_texts = parse_image_search_result_by_text(search_results,
+                search_result = json.load(f_tmp)
+                search_images, search_texts = parse_image_search_result_by_text(search_result,
                                                                                 save_path,
                                                                                 idx,
                                                                                 conversation_num)
                 if len(search_texts) == 0:
                     print('Extra image search!')
+                    search_result = search_image_by_text(query)
+                    search_images, search_texts = parse_image_search_result_by_text(search_result,
+                                                                                    save_path,
+                                                                                    idx,
+                                                                                    conversation_num)
 
+                logger.debug(f"img_search_img: {search_images=}\n{search_texts=}")
+                return search_images, search_texts
+        else:
+            search_result = search_image_by_text(query)
+            search_images, search_texts = parse_image_search_result_by_text(search_result,
+                                                                            save_path,
+                                                                            idx,
+                                                                            conversation_num)
+            logger.debug(f"text_search_img: {search_images=}\n{search_texts=}")
+            return search_images, search_texts
 
-    if not search_results:
-        print(f"No results found for {query}.")
-        return [], []
+    else:
+        search_results = search_image_by_text(query)
+        search_images, search_texts = parse_image_search_result_by_text(search_results,
+                                                                        save_path,
+                                                                        idx,
+                                                                        conversation_num)
 
-    search_images, search_texts = parse_image_search_result_by_text(search_results, save_path, idx, conversation_num)
-
-    return search_images, search_texts
+        return search_images, search_texts

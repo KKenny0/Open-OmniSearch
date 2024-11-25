@@ -26,7 +26,7 @@ Analyse questions and answer of the sub-questions, then think about what is next
 <Sub-Question>
 Sub-Question needs to be solved in one step, without references.
 <Search>
-One of three retrieval methods: Image Retrieval with Input Image. Text Retrieval: xxx. Image Retrieval with Text Query: xxx.
+One of three retrieval methods: 1) Image Retrieval with Input Image. 2) Text Retrieval: xxx. 3) Image Retrieval with Text Query: xxx.
 
 ... (this Thought/Sub-Question/Search can be repeated zero or more times)
 

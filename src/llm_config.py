@@ -1,3 +1,6 @@
+import io
+import traceback
+from pathlib import Path
 import os
 from typing import Tuple
 
@@ -130,7 +133,8 @@ class OllamaService:
 class OllamaVisionService:
     def __init__(self,
                  host: str = "http://localhost:11434",
-                 model: str = "llama3.2-vision"):
+                 model: str = "llama3.2-vision",
+                 **kwargs):
         try:
             import ollama
         except ImportError:
@@ -150,23 +154,31 @@ class OllamaVisionService:
             self.model = model
 
         self._client = ollama.Client(self.host)
+        self.args = kwargs
 
     def __call__(self, messages, idx):
         answer = None
+        for idx, msg in enumerate(messages):
+            if msg["images"] and isinstance(msg["images"][0], io.BytesIO):
+                file_path = Path("temp.png")
+                with file_path.open("wb") as file:
+                    file.write(msg["images"][0].getvalue())
+                messages[idx].update({"images": [file_path]})
+
         while answer is None:
             try:
                 response = self._client.chat(
                     messages=messages,
                     model=self.model,
+                    options=self.args,
                 )
-
                 message = response['message']
                 answer = message['content']
-
                 return True, idx, message, answer
 
             except Exception as e:
                 logger.error(e)
+                logger.error(traceback.format_exc())
                 logger.error('发生异常，重试中！')
                 time.sleep(1)  # 等待一段时间再重试
                 continue
