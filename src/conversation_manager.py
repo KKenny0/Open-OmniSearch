@@ -1,12 +1,21 @@
-from typing import Tuple, List
-
 import re
-from io import BytesIO
 import requests
+from io import BytesIO
+from typing import Tuple, List
 from loguru import logger
 
 from .prompt import *
-from .search_duck import fine_search
+from .search import SearchService
+
+# Initialize the search service as a module-level singleton
+_search_service = None
+
+
+def get_search_service():
+    global _search_service
+    if _search_service is None:
+        _search_service = SearchService()
+    return _search_service
 
 
 class ConversationManager:
@@ -105,30 +114,30 @@ class ConversationManager:
             ]
             success, idx, message, answer = self.qa_agent.ask_gpt(messages, idx)
 
-            return fine_search(answer,
-                               'img_search_img',
-                               self.save_path,
-                               self.dataset_name,
-                               idx,
-                               self.conversation_num)
+            return get_search_service().fine_search(answer,
+                                                    'img_search_img',
+                                                    self.save_path,
+                                                    self.dataset_name,
+                                                    idx,
+                                                    self.conversation_num)
 
         elif "Text Retrieval" in answer:
             query = self.extract_query(answer, 'Text Retrieval')
-            return fine_search(query,
-                               'text_search_text',
-                               self.save_path,
-                               self.dataset_name,
-                               idx,
-                               self.conversation_num)
+            return get_search_service().fine_search(query,
+                                                    'text_search_text',
+                                                    self.save_path,
+                                                    self.dataset_name,
+                                                    idx,
+                                                    self.conversation_num)
 
         elif "Image Retrieval with Text Query" in answer:
             query = self.extract_query(answer, 'Image Retrieval with Text Query')
-            return fine_search(query,
-                               'text_search_img',
-                               self.save_path,
-                               self.dataset_name,
-                               idx,
-                               self.conversation_num)
+            return get_search_service().fine_search(query,
+                                                    'text_search_img',
+                                                    self.save_path,
+                                                    self.dataset_name,
+                                                    idx,
+                                                    self.conversation_num)
 
     def extract_query(self, answer, retrieval_type):
         # the query based on the given retrieval type.

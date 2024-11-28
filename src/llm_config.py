@@ -159,7 +159,7 @@ class OllamaVisionService:
     def __call__(self, messages, idx):
         answer = None
         for idx, msg in enumerate(messages):
-            if msg["images"] and isinstance(msg["images"][0], io.BytesIO):
+            if msg.get("images", None) and isinstance(msg["images"][0], io.BytesIO):
                 file_path = Path("temp.png")
                 with file_path.open("wb") as file:
                     file.write(msg["images"][0].getvalue())
